@@ -1,0 +1,381 @@
+---
+title: "Untitled"
+author: "Simon"
+date: "2019/11/20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r,warning=FALSE}
+library(dplyr)
+library(car)
+library(alr3)
+library(corrplot)
+library(reshape2)
+library(ggplot2)
+library(leaps)
+library(tidyr)
+library(MASS)
+library(randomForest) 
+library(xgboost)
+library(caret)
+library(mlr)
+library(randomForest)
+# library(mlbench)
+library(caret)
+library(e1071)
+ 
+test.full<-read.csv("test.csv")
+train.full<-read.csv("train.csv")
+```
+
+
+
+```{r}
+
+test.full<-read.csv("test.csv")
+train.full<-read.csv("train.csv")
+
+
+train.full<-train.full[,-c(1,2,4,5,6,7,8,115:166)]
+test.full<-test.full[,-c(1:7,114:165)]
+
+j=1
+additional<-list()
+for(i in c(4:29)){
+  additional[[j]]<- ifelse(train.full[,i]>= train.full[,i+26], 1, 0)
+  j=j+1
+}
+for(i in 1:26){
+  names(additional)[i]<-paste("extra",i, sep="")
+}
+train.full<-as.data.frame(cbind(train.full,additional))
+
+
+j=1
+for(i in c(56:105)){
+  additional[[j]] <- ifelse(train.full[,i]>= train.full[,i+52], 1, 0)
+  j=j+1
+}
+for(i in 27:76){
+  names(additional)[i-26]<-paste("extra",i, sep="")
+}
+train.full<-as.data.frame(cbind(train.full,additional))
+
+
+j=1
+adds<-list()
+for(i in c(106:107)){
+  adds[[j]] <- ifelse(train.full[,i]>= train.full[,i+52], 1, 0)
+  j=j+1
+}
+for(i in 77:78){
+  names(adds)[i-76]<-paste("extra",i, sep="")
+}
+train.full<-as.data.frame(cbind(train.full,adds))
+
+
+j=1
+additional<-list()
+for(i in c(56:80)){
+  additional[[j]]<- ifelse(train.full[,i]>= train.full[,i+25], 1, 0)
+  j=j+1
+}
+for(i in 79:103){
+  names(additional)[i-78]<-paste("extra",i, sep="")
+}
+train.full<-as.data.frame(cbind(train.full,additional))
+
+
+
+
+index=sample(1:nrow(train.full), nrow(train.full)*0.5)
+testingcv=train.full[-index,]
+trainingcv=train.full[index,]
+
+
+j=1
+additional<-list()
+for(i in c(4:29)){
+  additional[[j]]<- ifelse(test.full[,6+i]>= test.full[,6+i+26], 1, 0)
+  j=j+1
+}
+for(i in 1:26){
+  names(additional)[i]<-paste("extra",i, sep="")
+}
+test.full<-as.data.frame(cbind(test.full,additional))
+
+
+j=1
+for(i in c(56:105)){
+  additional[[j]] <- ifelse(test.full[,6+i]>= test.full[,6+i+52], 1, 0)
+  j=j+1
+}
+for(i in 27:76){
+  names(additional)[i-26]<-paste("extra",i, sep="")
+}
+test.full<-as.data.frame(cbind(test.full,additional))
+
+
+j=1
+adds<-list()
+for(i in c(106:107)){
+  adds[[j]] <- ifelse(test.full[,6+i]>= test.full[,6+i+52], 1, 0)
+  j=j+1
+}
+for(i in 77:78){
+  names(adds)[i-76]<-paste("extra",i, sep="")
+}
+test.full<-as.data.frame(cbind(test.full,adds))
+
+
+j=1
+additional<-list()
+for(i in c(56:80)){
+  additional[[j]]<- ifelse(test.full[,6+i]>= test.full[,6+i+25], 1, 0)
+  j=j+1
+}
+for(i in 79:103){
+  names(additional)[i-78]<-paste("extra",i, sep="")
+}
+test.full<-as.data.frame(cbind(test.full,additional))
+
+
+```
+
+```{r}
+win<-trainingcv%>%filter(HTWins=="No")
+lose<-trainingcv%>%filter(HTWins=="Yes")
+
+par(mfrow=c(1,2))
+boxplot(win$VT.pmxU)
+boxplot(lose$VT.pmxU)
+
+
+par(mfrow=c(1,2))
+boxplot(win$VT.pmxW)
+boxplot(lose$VT.pmxW)
+
+par(mfrow=c(1,2))
+boxplot(win$HT.pmxU)
+boxplot(lose$HT.pmxU)
+
+
+par(mfrow=c(1,2))
+boxplot(win$HT.pmxW)
+boxplot(lose$HT.pmxW)
+
+
+par(mfrow=c(2,2))
+boxplot(win$VT.S1.plmin,main="Win$VT.S1.plmin",ylim=c(10,-10))
+boxplot(win$HT.S1.plmin,main="Win$HT.S1.plmin",ylim=c(10,-10))
+boxplot(lose$VT.S1.plmin,main="lose$VT.S1.plmin",ylim=c(10,-10))
+boxplot(lose$HT.S1.plmin,main="lose$HT.S1.plmin",ylim=c(10,-10))
+
+par(mfrow=c(1,2))
+boxplot(win$VT.OS2.plmin)
+boxplot(win$HT.OS2.plmin)
+
+par(mfrow=c(1,2))
+boxplot(win$HT.OS3.plmin)
+boxplot(win$VT.OS3.plmin)
+
+
+```
+
+
+
+
+tree
+```{r}
+
+# bestmtry <- tuneRF(trainingcv[,-1],trainingcv[,1], stepFactor=2, improve=1e-5, ntree=300,mtryStart = 20)
+# print(bestmtry)
+
+bag0 = randomForest(HTWins~.,data = trainingcv,mtry=20,ntree=200,importance=TRUE)
+summary(bag0)
+plot(bag0)
+
+
+
+# predict.class <- predict(bag0, testingcv, type="class")
+# sum(as.character(predict.class)==testingcv$HTWins)
+
+```
+
+```{r}
+predict.class <- predict(bag0, testingcv, type="class")
+sum(as.character(predict.class)==testingcv$HTWins)
+varImpPlot(bag0,n.var = 20)
+a<-names(sort(importance(bag0)[,3], decreasing = T)[1:70])
+
+form <- as.formula(paste("HTWins ~", paste(a, sep="", collapse=" + ") ))
+```
+
+
+
+logit
+```{r}
+glm1 = glm(HTWins~. , data=trainingcv, family=binomial) %>% stepAIC(trace=F)
+summary(glm1)
+
+result<-ifelse(predict(glm1,testingcv)>0.5,"Yes","No")
+sum(result==testingcv$HTWins)
+```
+
+
+
+boost train
+```{r}
+win <-ifelse(trainingcv$HTWins=="Yes",1,0)
+traintrain <- trainingcv[,-1]
+traintrain <- as.matrix(traintrain)
+
+xgb <- xgboost(data = traintrain, label = win, nround = 25, 
+               booster = "gbtree", objective = "binary:logistic", eta=0.3, gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
+
+names <- dimnames(traintrain)[[2]]
+importance_matrix <- xgb.importance(names, model = xgb)
+xgb.plot.importance(importance_matrix)
+
+testtest <- testingcv[,-1]
+
+testtest <- as.matrix(testtest)
+
+preds <- predict(xgb, newdata=testtest)
+
+preds<-ifelse(preds>0.5,"Yes","No")
+sum(preds==testingcv$HTWins)
+```
+
+```{r}
+traintrain <- trainingcv[,]
+testtest <- testingcv[,]
+
+
+traintask <- makeClassifTask (data = traintrain,target = "HTWins")
+testtask <- makeClassifTask (data = testtest,target = "HTWins")
+# 
+# #do one hot encoding`<br/> 
+#  traintask <- createDummyFeatures (obj = traintask,target = "HTWins") 
+#  testtask <- createDummyFeatures (obj = testtask,target = "HTWins")
+# 
+
+lrn <- makeLearner("classif.xgboost",predict.type = "response")
+lrn$par.vals <- list( objective="binary:logistic", eval_metric="error", nrounds=20L, eta=0.1)
+
+#set parameter space
+params <- makeParamSet( makeDiscreteParam("booster",values = c("gbtree","gblinear")), makeIntegerParam("max_depth",lower = 3L,upper = 10L), makeNumericParam("min_child_weight",lower = 1L,upper = 10L), makeNumericParam("subsample",lower = 0.5,upper = 1), makeNumericParam("colsample_bytree",lower = 0.5,upper = 1))
+
+#set resampling strategy
+rdesc <- makeResampleDesc("CV",stratify = T,iters=5L)
+
+ctrl <- makeTuneControlRandom(maxit = 10L)
+
+mytune <- tuneParams(learner = lrn, task = traintask, resampling = rdesc, measures = acc, par.set = params, control = ctrl, show.info = T)
+mytune$y 
+
+#set hyperparameters
+lrn_tune <- setHyperPars(lrn,par.vals = mytune$x)
+
+#train model
+xgmodel <- train(learner = lrn_tune,task = traintask)
+
+#predict model
+xgpred <- predict(xgmodel,testtask)
+confusionMatrix(xgpred$data$response,xgpred$data$truth)
+
+```
+
+boost output
+```{r}
+win <-ifelse(trainingcv$HTWins=="Yes",1,0)
+traintrain <- trainingcv[,-1]
+traintrain <- as.matrix(traintrain)
+
+xgb <- xgboost(data = traintrain, label = win, nthread = 3, nround = 100, eta = 0.1, max_depth = 4, 
+               min.child.weight = 10, objective = "binary:logistic",colsample_bytree=0.32,subsample=1,verbose = FALSE)
+
+names <- dimnames(traintrain)[[2]]
+importance_matrix <- xgb.importance(names, model = xgb)
+# xgb.plot.importance(importance_matrix)
+
+testtest <- testingcv[,-1]
+
+testtest <- as.matrix(testtest)
+
+preds <- predict(xgb, newdata=testtest)
+
+preds<-ifelse(preds>0.5,"Yes","No")
+sum(preds==testingcv$HTWins)
+
+table(predict = preds, truth = testingcv$HTWins)
+# test.full<-read.csv("test.csv")
+# outp<-as.data.frame(cbind(test.full$id,as.character(preds)),stringsAsFactors = FALSE)
+# colnames(outp)<-c("id","HTWins")
+# write.csv(outp, file = "MyData.csv",row.names = FALSE)
+```
+
+```{r}
+fit = svm(factor(HTWins) ~ ., data = trainingcv, scale = FALSE, kernel = "radial", cost = 5)
+
+tune.out <- tune(svm, HTWins~., data = trainingcv, kernel = "radial",
+                 ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)))
+
+(bestmod <- tune.out$best.model)
+
+
+ypred <- predict(bestmod, testingcv)
+(misclass <- table(predict = ypred, truth = testingcv$HTWins))
+```
+
+
+
+```{r}
+library(neuralnet)
+
+# fit neural network
+nn=neuralnet(HTWins~.,data=trainingcv, hidden=3,act.fct = "logistic",
+                linear.output = FALSE)
+plot(nn)
+
+Predict=compute(nn,testingcv[,-1])
+# prob <- Predict$net.result
+pred <- ifelse(prob>0.5, 1, 0)
+pred[pred==1]<-"Yes"
+pred[pred==0]<-"No"
+
+sum(pred==testingcv$HTWins)
+
+
+predict_testNN = compute(nn, testingcv[,-1])
+# predict_testNN = (predict_testNN$net.result * (max(data$rating) - min(data$rating))) + min(data$rating)
+
+```
+
+predict test.full and output
+```{r}
+predict.class <- predict(bag0, test.full, type="class")
+# predict.class<-ifelse(predict(glm1,test.full)>0.5,"Yes","No")
+test.full<-read.csv("test.csv")
+outp<-as.data.frame(cbind(test.full$id,as.character(predict.class)),stringsAsFactors = FALSE)
+colnames(outp)<-c("id","HTWins")
+write.csv(outp, file = "MyData.csv",row.names = FALSE)
+
+```
+
+```{r}
+a<-c("SVM","Random Forest","XGBoost","Logit")
+b<-c(0.6689076,0.6710084,0.6894958,0.6533613)
+
+c<-as.data.frame(cbind(a,b))
+c$b<-as.numeric(as.character(c$b))
+ggplot(data=c, aes(x=a, y=b,fill=c("red","blue","green","purple"))) +
+  geom_bar(stat="identity")+ theme(legend.position="none") + coord_cartesian(ylim=c(0.6,0.7))+ labs(title="Plot of Accuracy for Every Model", 
+         x="Models", y = "Accuracy")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
